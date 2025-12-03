@@ -1,9 +1,25 @@
 # Gemini – Google Drive Connector
 
-[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Code Style](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![GitHub](https://img.shields.io/github/license/bantoinese83/Gemini-Google-Drive-Connector)](https://github.com/bantoinese83/Gemini-Google-Drive-Connector/blob/main/LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/bantoinese83/Gemini-Google-Drive-Connector?style=social)](https://github.com/bantoinese83/Gemini-Google-Drive-Connector/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/bantoinese83/Gemini-Google-Drive-Connector?style=social)](https://github.com/bantoinese83/Gemini-Google-Drive-Connector/network/members)
+[![GitHub issues](https://img.shields.io/github/issues/bantoinese83/Gemini-Google-Drive-Connector)](https://github.com/bantoinese83/Gemini-Google-Drive-Connector/issues)
+[![GitHub pull requests](https://img.shields.io/github/issues-pr/bantoinese83/Gemini-Google-Drive-Connector)](https://github.com/bantoinese83/Gemini-Google-Drive-Connector/pulls)
+
+[![Python](https://img.shields.io/badge/Python-3.9+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Python Version](https://img.shields.io/pypi/pyversions/gemini-drive-connector)](https://www.python.org/)
+[![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![Type Check: mypy](https://img.shields.io/badge/type%20check-mypy-blue)](https://github.com/python/mypy)
+[![Testing: pytest](https://img.shields.io/badge/testing-pytest-0A9EDC?logo=pytest&logoColor=white)](https://pytest.org/)
+
+[![Google Drive API](https://img.shields.io/badge/Google%20Drive%20API-4285F4?logo=google-drive&logoColor=white)](https://developers.google.com/drive)
+[![Google Gemini](https://img.shields.io/badge/Google%20Gemini-4285F4?logo=google&logoColor=white)](https://ai.google.dev/)
+[![OAuth 2.0](https://img.shields.io/badge/OAuth%202.0-EB5424?logo=oauth&logoColor=white)](https://oauth.net/2/)
+
+[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/bantoinese83/Gemini-Google-Drive-Connector/graphs/commit-activity)
+[![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/bantoinese83/Gemini-Google-Drive-Connector/blob/main/README.md)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
 
 > **A production-ready connector that links Google Drive folders to Gemini File Search stores, enabling AI-powered chat over your Drive content without managing your own vector database.**
 

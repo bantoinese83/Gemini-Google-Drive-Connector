@@ -1,6 +1,6 @@
 """Gemini chat/query operations."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from google.genai import types as gtypes
 from loguru import logger  # type: ignore[import-untyped]
@@ -61,7 +61,7 @@ class GeminiChat:
         logger.debug(f"Response length: {len(answer)} characters")
         return answer
 
-    def _create_chat(self, file_search_store_name: str) -> "genai.types.Chat":
+    def _create_chat(self, file_search_store_name: str) -> Any:  # type: ignore[no-any-return]
         """Create chat instance bound to file search store."""
         return safe_execute(
             "create chat",
@@ -69,7 +69,7 @@ class GeminiChat:
             "Failed to create chat",
         )
 
-    def _do_create_chat(self, file_search_store_name: str) -> "genai.types.Chat":
+    def _do_create_chat(self, file_search_store_name: str) -> Any:  # type: ignore[no-any-return]
         """Internal method to create chat (without error handling)."""
         file_search_tool = gtypes.Tool(
             file_search=gtypes.FileSearch(file_search_store_names=[file_search_store_name])

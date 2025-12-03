@@ -1,7 +1,7 @@
 """Google Drive file operations."""
 
 import io
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload
@@ -117,7 +117,7 @@ class DriveFileHandler:
         """Get maximum number of pages to fetch."""
         return 100
 
-    def _fetch_page(self, query: str, page_token: str | None) -> dict:
+    def _fetch_page(self, query: str, page_token: str | None) -> dict[str, Any]:
         """Fetch a single page of files.
 
         Args:
@@ -138,7 +138,7 @@ class DriveFileHandler:
             self._handle_http_error(error, "list files")
             raise  # Never reached, but satisfies type checker
 
-    def _extract_files_from_response(self, response: dict) -> list[dict[str, str]]:
+    def _extract_files_from_response(self, response: dict[str, Any]) -> list[dict[str, str]]:
         """Extract file list from API response.
 
         Args:
@@ -149,7 +149,7 @@ class DriveFileHandler:
         """
         return response.get("files", [])
 
-    def _get_next_page_token(self, response: dict) -> str | None:
+    def _get_next_page_token(self, response: dict[str, Any]) -> str | None:
         """Extract next page token from API response.
 
         Args:
@@ -203,7 +203,7 @@ class DriveFileHandler:
             self._handle_http_error(error, "download file")
             raise  # Never reached, but satisfies type checker
 
-    def _create_download_request(self, file_id: str):
+    def _create_download_request(self, file_id: str) -> Any:
         """Create download request for file.
 
         Args:
@@ -214,7 +214,7 @@ class DriveFileHandler:
         """
         return self._files_api.get_media(fileId=file_id)
 
-    def _download_to_buffer(self, request) -> io.BytesIO:
+    def _download_to_buffer(self, request: Any) -> io.BytesIO:
         """Download file content to buffer in chunks.
 
         Args:

@@ -120,7 +120,7 @@ class GeminiFileStore:
             RuntimeError: If operation fails
         """
         poll_attempts = 0
-        current_interval = INITIAL_POLL_INTERVAL
+        current_interval: float = float(INITIAL_POLL_INTERVAL)
 
         while not operation.done and poll_attempts < MAX_POLL_ATTEMPTS:
             time.sleep(current_interval)

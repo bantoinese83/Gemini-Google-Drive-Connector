@@ -96,7 +96,12 @@ class GeminiDriveConnector:
 
         Returns:
             DriveFileHandler instance
+
+        Raises:
+            RuntimeError: If Drive client is not initialized
         """
+        if self._drive_client is None:
+            raise RuntimeError("Drive client must be initialized before creating file handler")
         return DriveFileHandler(self._drive_client.service)
 
     def _list_files_in_folder(

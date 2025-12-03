@@ -134,28 +134,32 @@ class GeminiDriveConnector:
             files: List of file metadata dictionaries
             file_handler: DriveFileHandler instance
         """
-        for idx, file_info in enumerate(files, 1):
+        for file_index, file_info in enumerate(files, 1):
             file_id = file_info["id"]
-            name = file_info["name"]
+            file_name = file_info["name"]
             mime_type = file_info.get("mimeType", "application/octet-stream")
 
-            logger.info(f"Processing file {idx}/{len(files)}: {name} ({mime_type})")
+            logger.info(f"Processing file {file_index}/{len(files)}: {file_name} ({mime_type})")
 
-            self._process_file_safely(file_handler, file_id, name, mime_type)
+            self._process_file_safely(file_handler, file_id, file_name, mime_type)
 
     def _process_file_safely(
-        self, file_handler: DriveFileHandler, file_id: str, name: str, mime_type: str
+        self,
+        file_handler: DriveFileHandler,
+        file_id: str,
+        file_name: str,
+        mime_type: str,
     ) -> None:
         """Process a file with error handling.
 
         Args:
             file_handler: DriveFileHandler instance
             file_id: Google Drive file ID
-            name: File name
+            file_name: File name
             mime_type: File MIME type
         """
         try:
-            self._process_file(file_handler, file_id, name, mime_type)
+            self._process_file(file_handler, file_id, file_name, mime_type)
         except (
             OSError,
             ValueError,
@@ -164,61 +168,67 @@ class GeminiDriveConnector:
             TimeoutError,
             FileNotFoundError,
             PermissionError,
-        ) as e:
-            logger.error(f"Error processing {name}: {e}")
-        except Exception as e:
-            logger.exception(f"Unexpected error processing {name}: {e}")
+        ) as error:
+            logger.error(f"Error processing {file_name}: {error}")
+        except Exception as error:
+            logger.exception(f"Unexpected error processing {file_name}: {error}")
 
     def _process_file(
-        self, file_handler: DriveFileHandler, file_id: str, name: str, mime_type: str
+        self,
+        file_handler: DriveFileHandler,
+        file_id: str,
+        file_name: str,
+        mime_type: str,
     ) -> None:
         """Process a single file: download, upload, and index.
 
         Optimized to minimize memory usage by processing in stages.
         """
-        content = self._download_file(file_handler, file_id, name)
-        uploaded = self._upload_file_to_store(content, name, mime_type)
-        uploaded_name = self._validate_uploaded_file_name(uploaded, name)
-        self._index_file(uploaded_name, name)
+        file_content = self._download_file(file_handler, file_id, file_name)
+        uploaded_file = self._upload_file_to_store(file_content, file_name, mime_type)
+        uploaded_file_name = self._validate_uploaded_file_name(uploaded_file, file_name)
+        self._index_file(uploaded_file_name, file_name)
 
         # Explicitly clear content from memory after processing
-        del content
+        del file_content
 
-    def _download_file(self, file_handler: DriveFileHandler, file_id: str, name: str) -> bytes:
+    def _download_file(self, file_handler: DriveFileHandler, file_id: str, file_name: str) -> bytes:
         """Download file from Drive.
 
         Args:
             file_handler: DriveFileHandler instance
             file_id: Google Drive file ID
-            name: File name for logging
+            file_name: File name for logging
 
         Returns:
             File content as bytes
         """
         with (
-            spinner_context(f"Downloading {name}...", f"Downloaded {name}"),
-            PerformanceProfiler(f"download_{name}"),
+            spinner_context(f"Downloading {file_name}...", f"Downloaded {file_name}"),
+            PerformanceProfiler(f"download_{file_name}"),
         ):
             return file_handler.download_file(file_id)
 
     def _upload_file_to_store(
-        self, content: bytes, name: str, mime_type: str
+        self, file_content: bytes, file_name: str, mime_type: str
     ) -> "genai.types.File":
         """Upload file to Gemini File Search store.
 
         Args:
-            content: File content as bytes
-            name: File name
+            file_content: File content as bytes
+            file_name: File name
             mime_type: File MIME type
 
         Returns:
             Uploaded file object
         """
         with (
-            spinner_context(f"Uploading {name} to File Search store...", f"Uploaded {name}"),
-            PerformanceProfiler(f"upload_{name}"),
+            spinner_context(
+                f"Uploading {file_name} to File Search store...", f"Uploaded {file_name}"
+            ),
+            PerformanceProfiler(f"upload_{file_name}"),
         ):
-            return self._file_store.upload_file(content, name, mime_type)
+            return self._file_store.upload_file(file_content, file_name, mime_type)
 
     def _validate_uploaded_file_name(self, uploaded: "genai.types.File", original_name: str) -> str:
         """Validate and extract uploaded file name.

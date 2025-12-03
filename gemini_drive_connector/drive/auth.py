@@ -85,8 +85,8 @@ class DriveAuth:
         """
         try:
             return Credentials.from_authorized_user_file(self.token_path, DRIVE_SCOPES)
-        except (json.JSONDecodeError, ValueError, KeyError) as e:
-            logger.warning(f"Token file corrupted, will re-authenticate: {e}")
+        except (json.JSONDecodeError, ValueError, KeyError) as error:
+            logger.warning(f"Token file corrupted, will re-authenticate: {error}")
             self._remove_corrupted_token_file()
             return None
 
@@ -110,8 +110,8 @@ class DriveAuth:
         try:
             creds.refresh(Request())
             return creds
-        except Exception as e:
-            logger.warning(f"Token refresh failed, will re-authenticate: {e}")
+        except Exception as error:
+            logger.warning(f"Token refresh failed, will re-authenticate: {error}")
             return None
 
     def _authenticate(self) -> Credentials:
@@ -151,20 +151,20 @@ class DriveAuth:
             ValueError: If credentials file is invalid
         """
         try:
-            with open(self.credentials_path, encoding="utf-8") as f:
-                json.load(f)
-        except (json.JSONDecodeError, OSError) as e:
+            with open(self.credentials_path, encoding="utf-8") as credentials_file:
+                json.load(credentials_file)
+        except (json.JSONDecodeError, OSError) as error:
             raise ValueError(
-                f"Invalid credentials file format: {self.credentials_path}. {e}"
-            ) from e
+                f"Invalid credentials file format: {self.credentials_path}. {error}"
+            ) from error
 
     def _save_token(self, creds: Credentials) -> None:
         """Save credentials token to file."""
         try:
             with open(self.token_path, "w", encoding="utf-8") as token_file:
                 token_file.write(creds.to_json())
-        except OSError as e:
-            logger.warning(f"Failed to save token file: {e}")
+        except OSError as error:
+            logger.warning(f"Failed to save token file: {error}")
 
     def _build_service(self, creds: Credentials) -> "Resource":
         """Build Drive service from credentials.

@@ -48,8 +48,8 @@ def safe_execute(
     """
     try:
         return func()
-    except Exception as e:
-        raise handle_api_error(operation, e, error_message) from e
+    except Exception as error:
+        raise handle_api_error(operation, error, error_message) from error
 
 
 def handle_file_error(operation: str, file_name: str, exc: Exception) -> RuntimeError:

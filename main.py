@@ -46,13 +46,13 @@ def get_connector() -> GeminiDriveConnector:
         raise RuntimeError("GEMINI_API_KEY is not set in environment or .env")
 
     logger.debug(f"Creating connector with model: {GEMINI_MODEL}, store: {FILE_STORE_DISPLAY_NAME}")
-    cfg = GeminiDriveConnectorConfig(
+    config = GeminiDriveConnectorConfig(
         api_key=GEMINI_API_KEY,
         model=GEMINI_MODEL,
         file_store_display_name=FILE_STORE_DISPLAY_NAME,
         allowed_mime_types=DEFAULT_MIME_TYPES,
     )
-    return GeminiDriveConnector(cfg)
+    return GeminiDriveConnector(config)
 
 
 def cmd_sync() -> None:
@@ -128,29 +128,29 @@ def _handle_ask_command() -> None:
     cmd_ask(question)
 
 
-def _handle_unknown_command(cmd: str) -> None:
+def _handle_unknown_command(command: str) -> None:
     """Handle unknown command.
 
     Args:
-        cmd: Unknown command string
+        command: Unknown command string
     """
-    logger.error(f"Unknown command: {cmd}")
-    print(f"Unknown command: {cmd}")
+    logger.error(f"Unknown command: {command}")
+    print(f"Unknown command: {command}")
     sys.exit(1)
 
 
-def _route_command(cmd: str) -> None:
+def _route_command(command: str) -> None:
     """Route command to appropriate handler.
 
     Args:
-        cmd: Command string
+        command: Command string
     """
-    if cmd == "sync":
+    if command == "sync":
         _handle_sync_command()
-    elif cmd == "ask":
+    elif command == "ask":
         _handle_ask_command()
     else:
-        _handle_unknown_command(cmd)
+        _handle_unknown_command(command)
 
 
 def _handle_keyboard_interrupt() -> None:
@@ -184,16 +184,16 @@ def _handle_unexpected_error(error: Exception) -> None:
 
 def main() -> None:
     """Main CLI entry point."""
-    cmd = _parse_command()
+    command = _parse_command()
 
     try:
-        _route_command(cmd)
+        _route_command(command)
     except KeyboardInterrupt:
         _handle_keyboard_interrupt()
-    except (RuntimeError, FileNotFoundError, ValueError, PermissionError) as e:
-        _handle_expected_error(e)
-    except Exception as e:
-        _handle_unexpected_error(e)
+    except (RuntimeError, FileNotFoundError, ValueError, PermissionError) as error:
+        _handle_expected_error(error)
+    except Exception as error:
+        _handle_unexpected_error(error)
 
 
 if __name__ == "__main__":

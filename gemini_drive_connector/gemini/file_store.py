@@ -94,7 +94,7 @@ class GeminiFileStore:
             RuntimeError: If import fails
             TimeoutError: If import operation times out
         """
-        op = safe_execute(
+        import_operation = safe_execute(
             f"start importing file {file_name}",
             lambda: self.client.file_search_stores.import_file(
                 file_search_store_name=self.name,
@@ -103,7 +103,7 @@ class GeminiFileStore:
             f"Failed to start importing file {file_name}",
         )
 
-        self._wait_for_operation(op, file_name)
+        self._wait_for_operation(import_operation, file_name)
 
     def _wait_for_operation(self, operation: "genai.types.Operation", file_name: str) -> None:
         """Wait for import operation to complete with exponential backoff.
@@ -141,8 +141,10 @@ class GeminiFileStore:
         """
         try:
             return self.client.operations.get(operation)
-        except Exception as e:
-            raise handle_api_error("check operation status", e, "Operation polling failed") from e
+        except Exception as error:
+            raise handle_api_error(
+                "check operation status", error, "Operation polling failed"
+            ) from error
 
     def _calculate_next_poll_interval(self, poll_attempts: int, current_interval: float) -> float:
         """Calculate next polling interval with exponential backoff.

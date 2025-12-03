@@ -77,7 +77,7 @@ class DriveFileHandler:
         query_parts: list[str] = [f"'{folder_id}' in parents", "trashed = false"]
         if mime_types:
             # Use list comprehension for better performance than repeated string concatenation
-            mime_conditions = [f"mimeType = '{m}'" for m in mime_types]
+            mime_conditions = [f"mimeType = '{mime_type}'" for mime_type in mime_types]
             mime_query = " or ".join(mime_conditions)
             query_parts.append(f"({mime_query})")
         return " and ".join(query_parts)
@@ -107,9 +107,9 @@ class DriveFileHandler:
 
         except (FileNotFoundError, PermissionError, RuntimeError):
             raise
-        except Exception as e:
-            logger.error(f"Unexpected error listing files: {e}")
-            raise RuntimeError(f"Failed to list files: {e}") from e
+        except Exception as error:
+            logger.error(f"Unexpected error listing files: {error}")
+            raise RuntimeError(f"Failed to list files: {error}") from error
 
         return files
 
@@ -129,13 +129,13 @@ class DriveFileHandler:
         """
         try:
             return self._files_api.list(
-                q=query,
+                q=query,  # Drive API query parameter
                 spaces="drive",
                 fields="nextPageToken, files(id, name, mimeType, size)",
                 pageToken=page_token,
             ).execute()
-        except HttpError as e:
-            self._handle_http_error(e, "list files")
+        except HttpError as error:
+            self._handle_http_error(error, "list files")
             raise  # Never reached, but satisfies type checker
 
     def _extract_files_from_response(self, response: dict) -> list[dict[str, str]]:
@@ -174,20 +174,20 @@ class DriveFileHandler:
         """Validate file size before download."""
         try:
             file_metadata = self._files_api.get(fileId=file_id, fields="size, name").execute()
-            file_size = int(file_metadata.get("size", 0))
+            file_size_bytes = int(file_metadata.get("size", 0))
             file_name = file_metadata.get("name", "unknown")
 
-            if file_size == 0:
+            if file_size_bytes == 0:
                 logger.warning(f"File {file_name} is empty")
 
-            file_size_mb = file_size / (1024 * 1024)
-            if file_size_mb > MAX_FILE_SIZE_MB:
+            file_size_megabytes = file_size_bytes / (1024 * 1024)
+            if file_size_megabytes > MAX_FILE_SIZE_MB:
                 raise ValueError(
-                    f"File {file_name} is too large ({file_size_mb:.1f}MB). "
+                    f"File {file_name} is too large ({file_size_megabytes:.1f}MB). "
                     f"Maximum size is {MAX_FILE_SIZE_MB}MB"
                 )
-        except HttpError as e:
-            self._handle_http_error(e, "get file metadata")
+        except HttpError as error:
+            self._handle_http_error(error, "get file metadata")
 
     def _download_content(self, file_id: str) -> bytes:
         """Download file content with optimized memory usage.
@@ -199,8 +199,8 @@ class DriveFileHandler:
             buffer = self._download_to_buffer(request)
             return self._read_buffer_content(buffer)
 
-        except HttpError as e:
-            self._handle_http_error(e, "download file")
+        except HttpError as error:
+            self._handle_http_error(error, "download file")
             raise  # Never reached, but satisfies type checker
 
     def _create_download_request(self, file_id: str):
@@ -250,11 +250,11 @@ class DriveFileHandler:
             True if download is complete, False otherwise
         """
         try:
-            _, done = downloader.next_chunk()
-            return done
-        except Exception as e:
-            logger.error(f"Download chunk failed: {e}")
-            raise RuntimeError(f"Failed to download file: {e}") from e
+            _, is_download_complete = downloader.next_chunk()
+            return is_download_complete
+        except Exception as error:
+            logger.error(f"Download chunk failed: {error}")
+            raise RuntimeError(f"Failed to download file: {error}") from error
 
     def _validate_chunk_count(self, chunk_count: int, max_chunks: int) -> None:
         """Validate that chunk count doesn't exceed maximum.

@@ -48,11 +48,11 @@ class GeminiChat:
         logger.info(f"Processing question: {prompt[:50]}...")
 
         try:
-            resp = self._chat.send_message(prompt)
-        except Exception as e:
-            raise handle_api_error("query Gemini", e) from e
+            response = self._chat.send_message(prompt)
+        except Exception as error:
+            raise handle_api_error("query Gemini", error) from error
 
-        answer = getattr(resp, "text", "") or ""
+        answer = getattr(response, "text", "") or ""
 
         if not answer:
             logger.warning("Received empty response from Gemini")

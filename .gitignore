@@ -1,0 +1,46 @@
+# Virtual environment
+venv/
+env/
+ENV/
+
+# Environment variables
+.env
+
+# Google OAuth tokens
+token.json
+
+# Credentials (should be provided by client)
+credentials.json
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.coverage.*
+coverage.xml
+*.cover
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Vulture
+.vulture_whitelist.txt
+

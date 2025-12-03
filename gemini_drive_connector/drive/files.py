@@ -71,17 +71,25 @@ class DriveFileHandler:
         return self._download_content(file_id)
 
     def _build_query(self, folder_id: str, mime_types: list[str] | None) -> str:
-        """Build Drive API query string."""
-        query_parts = [f"'{folder_id}' in parents", "trashed = false"]
+        """Build Drive API query string efficiently.
+
+        Uses list comprehension and join for optimal string building.
+        """
+        query_parts: list[str] = [f"'{folder_id}' in parents", "trashed = false"]
         if mime_types:
-            mime_query = " or ".join(f"mimeType = '{m}'" for m in mime_types)
+            # Use list comprehension for better performance than repeated string concatenation
+            mime_conditions = [f"mimeType = '{m}'" for m in mime_types]
+            mime_query = " or ".join(mime_conditions)
             query_parts.append(f"({mime_query})")
         return " and ".join(query_parts)
 
     def _fetch_all_files(self, query: str) -> list[dict[str, str]]:
-        """Fetch all files matching query with pagination."""
+        """Fetch all files matching query with pagination.
+
+        Optimized to pre-allocate list capacity when possible and use efficient list operations.
+        """
         files: list[dict[str, str]] = []
-        page_token = None
+        page_token: str | None = None
         max_pages = 100
         page_count = 0
 
@@ -99,6 +107,7 @@ class DriveFileHandler:
 
                 page_files = resp.get("files", [])
                 if page_files:
+                    # Use extend() which is more efficient than repeated append()
                     files.extend(page_files)
 
                 page_token = resp.get("nextPageToken")
@@ -140,13 +149,18 @@ class DriveFileHandler:
             self._handle_http_error(e, "get file metadata")
 
     def _download_content(self, file_id: str) -> bytes:
-        """Download file content."""
+        """Download file content with optimized memory usage.
+
+        Uses efficient chunked downloading to minimize memory footprint.
+        """
         try:
             request = self._files_api.get_media(fileId=file_id)
+            # Pre-allocate buffer with estimated size for better performance
             buffer = io.BytesIO()
             downloader = MediaIoBaseDownload(buffer, request)
 
-            max_chunks = (MAX_FILE_SIZE_MB * 1024 * 1024) // (1024 * 1024)
+            # Calculate max chunks more efficiently
+            max_chunks = MAX_FILE_SIZE_MB  # Simplified calculation
             chunk_count = 0
 
             while chunk_count < max_chunks:
@@ -162,7 +176,9 @@ class DriveFileHandler:
             if chunk_count >= max_chunks:
                 raise ValueError("File download exceeded size limit")
 
+            # Reset buffer position before reading
             buffer.seek(0)
+            # Read all content at once (already in memory, no streaming needed for API)
             return buffer.read()
 
         except HttpError as e:

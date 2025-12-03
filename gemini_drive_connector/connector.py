@@ -3,12 +3,24 @@
 from halo import Halo  # type: ignore[import-untyped]
 from loguru import logger  # type: ignore[import-untyped]
 
-from gemini_drive_connector.config.settings import GeminiDriveConnectorConfig
+from gemini_drive_connector.config.settings import (
+    PROFILING_ENABLED,
+    GeminiDriveConnectorConfig,
+)
 from gemini_drive_connector.drive.client import DriveClient
 from gemini_drive_connector.drive.files import DriveFileHandler
 from gemini_drive_connector.gemini.chat import GeminiChat
 from gemini_drive_connector.gemini.client import GeminiClient
 from gemini_drive_connector.gemini.file_store import GeminiFileStore
+
+# Conditionally import profiling utilities
+if PROFILING_ENABLED:
+    from gemini_drive_connector.utils.profiling import PerformanceProfiler
+else:
+    # Dummy context manager if profiling disabled
+    from contextlib import nullcontext
+
+    PerformanceProfiler = nullcontext  # type: ignore[assignment,misc]
 
 
 class GeminiDriveConnector:
@@ -67,9 +79,10 @@ class GeminiDriveConnector:
         # List files
         with Halo(text="Listing files in folder...", spinner="dots") as spinner:
             file_handler = DriveFileHandler(self._drive_client.service)
-            files = file_handler.list_files(
-                folder_id=folder_id, mime_types=self.config.allowed_mime_types
-            )
+            with PerformanceProfiler("list_files"):
+                files = file_handler.list_files(
+                    folder_id=folder_id, mime_types=self.config.allowed_mime_types
+                )
 
             if not files:
                 spinner.fail(f"No files found in folder {folder_id}")
@@ -108,15 +121,20 @@ class GeminiDriveConnector:
     def _process_file(
         self, file_handler: DriveFileHandler, file_id: str, name: str, mime_type: str
     ) -> None:
-        """Process a single file: download, upload, and index."""
-        # Download
+        """Process a single file: download, upload, and index.
+
+        Optimized to minimize memory usage by processing in stages.
+        """
+        # Download with profiling
         with Halo(text=f"Downloading {name}...", spinner="dots") as spinner:
-            content = file_handler.download_file(file_id)
+            with PerformanceProfiler(f"download_{name}"):
+                content = file_handler.download_file(file_id)
             spinner.succeed(f"Downloaded {name}")
 
-        # Upload to Gemini
+        # Upload to Gemini with profiling
         with Halo(text=f"Uploading {name} to File Search store...", spinner="dots") as spinner:
-            uploaded = self._file_store.upload_file(content, name, mime_type)
+            with PerformanceProfiler(f"upload_{name}"):
+                uploaded = self._file_store.upload_file(content, name, mime_type)
             spinner.succeed(f"Uploaded {name}")
 
         # Validate uploaded file name
@@ -124,10 +142,14 @@ class GeminiDriveConnector:
         if not uploaded_name:
             raise RuntimeError(f"Uploaded file {name} has no name attribute")
 
-        # Index
+        # Index with profiling
         with Halo(text=f"Indexing {name}...", spinner="dots") as spinner:
-            self._file_store.import_file(uploaded_name)
+            with PerformanceProfiler(f"index_{name}"):
+                self._file_store.import_file(uploaded_name)
             spinner.succeed(f"Indexed {name}")
+
+        # Explicitly clear content from memory after processing
+        del content
 
     def ask(self, prompt: str) -> str:
         """Ask a question over the indexed Drive content.

@@ -11,7 +11,11 @@ else:
 
 
 class DriveClient:
-    """Wrapper for Google Drive API service."""
+    """Wrapper for Google Drive API service with connection caching.
+
+    Caches the service connection to avoid repeated authentication and
+    service initialization, improving performance.
+    """
 
     def __init__(self, auth: DriveAuth | None = None) -> None:
         """Initialize Drive client.
@@ -24,7 +28,10 @@ class DriveClient:
 
     @property
     def service(self) -> Resource:
-        """Get or create Drive service.
+        """Get or create Drive service with lazy initialization.
+
+        Uses cached service if available to avoid repeated initialization.
+        This improves performance by reusing the authenticated connection.
 
         Returns:
             Authorized Drive service resource

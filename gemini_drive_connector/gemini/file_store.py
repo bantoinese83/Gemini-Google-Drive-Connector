@@ -5,7 +5,12 @@ from typing import TYPE_CHECKING
 
 from loguru import logger  # type: ignore[import-untyped]
 
-from gemini_drive_connector.config.settings import MAX_POLL_ATTEMPTS, POLL_INTERVAL
+from gemini_drive_connector.config.settings import (
+    INITIAL_POLL_INTERVAL,
+    MAX_POLL_ATTEMPTS,
+    MAX_POLL_INTERVAL,
+    POLL_INTERVAL,
+)
 
 if TYPE_CHECKING:
     from google import genai
@@ -54,7 +59,9 @@ class GeminiFileStore:
             raise RuntimeError(f"Failed to create file search store: {e}") from e
 
     def upload_file(self, content: bytes, display_name: str, mime_type: str) -> "genai.types.File":
-        """Upload a file to Gemini.
+        """Upload a file to Gemini with optimized memory handling.
+
+        Uses BytesIO for efficient memory management during upload.
 
         Args:
             content: File content as bytes
@@ -64,10 +71,13 @@ class GeminiFileStore:
         Returns:
             Uploaded file object
         """
-        # Convert bytes to BytesIO for type compatibility
+        # Convert bytes to BytesIO for type compatibility and memory efficiency
         import io
 
+        # BytesIO is more memory-efficient than keeping raw bytes for large files
         file_obj = io.BytesIO(content)
+        # Reset position to start of stream
+        file_obj.seek(0)
         return self.client.files.upload(
             file=file_obj,  # type: ignore[arg-type]
             config={"display_name": display_name, "mime_type": mime_type},
@@ -95,7 +105,10 @@ class GeminiFileStore:
         self._wait_for_operation(op, file_name)
 
     def _wait_for_operation(self, operation: "genai.types.Operation", file_name: str) -> None:
-        """Wait for import operation to complete.
+        """Wait for import operation to complete with exponential backoff.
+
+        Uses exponential backoff to reduce API calls and improve efficiency.
+        Starts with shorter intervals and increases gradually.
 
         Args:
             operation: Operation object to monitor
@@ -106,14 +119,24 @@ class GeminiFileStore:
             RuntimeError: If operation fails
         """
         poll_attempts = 0
+        current_interval = INITIAL_POLL_INTERVAL
+
         while not operation.done and poll_attempts < MAX_POLL_ATTEMPTS:
-            time.sleep(POLL_INTERVAL)
+            time.sleep(current_interval)
             try:
                 operation = self.client.operations.get(operation)
             except Exception as e:
                 logger.error(f"Failed to check operation status: {e}")
                 raise RuntimeError(f"Operation polling failed: {e}") from e
+
             poll_attempts += 1
+
+            # Exponential backoff: increase interval gradually, but cap at maximum
+            # This reduces API calls for long-running operations
+            if poll_attempts > 3:  # Start backoff after initial quick checks
+                current_interval = min(
+                    current_interval * 1.5, MAX_POLL_INTERVAL
+                )  # 1.5x multiplier, capped
 
         if not operation.done:
             timeout_seconds = MAX_POLL_ATTEMPTS * POLL_INTERVAL

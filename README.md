@@ -12,6 +12,9 @@
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Type Check: mypy](https://img.shields.io/badge/type%20check-mypy-blue)](https://github.com/python/mypy)
 [![Testing: pytest](https://img.shields.io/badge/testing-pytest-0A9EDC?logo=pytest&logoColor=white)](https://pytest.org/)
+[![Coverage](https://img.shields.io/badge/coverage-84%25-brightgreen)](https://github.com/bantoinese83/Gemini-Google-Drive-Connector)
+[![Tests](https://img.shields.io/badge/tests-133%20passing-success)](https://github.com/bantoinese83/Gemini-Google-Drive-Connector)
+[![Test Status](https://img.shields.io/badge/tests-passing-brightgreen)](https://github.com/bantoinese83/Gemini-Google-Drive-Connector)
 
 [![Google Drive API](https://img.shields.io/badge/Google%20Drive%20API-4285F4?logo=google-drive&logoColor=white)](https://developers.google.com/drive)
 [![Google Gemini](https://img.shields.io/badge/Google%20Gemini-4285F4?logo=google&logoColor=white)](https://ai.google.dev/)

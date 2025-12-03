@@ -13,15 +13,14 @@ from gemini_drive_connector.drive.files import DriveFileHandler
 from gemini_drive_connector.gemini.chat import GeminiChat
 from gemini_drive_connector.gemini.client import GeminiClient
 from gemini_drive_connector.gemini.file_store import GeminiFileStore
+from gemini_drive_connector.utils.profiling import PerformanceProfiler
 from gemini_drive_connector.utils.ui import spinner_context
 
 if TYPE_CHECKING:
     from google import genai
 
-# Conditionally import profiling utilities
-if PROFILING_ENABLED:
-    from gemini_drive_connector.utils.profiling import PerformanceProfiler
-else:
+# Conditionally use profiling utilities
+if not PROFILING_ENABLED:
     # Dummy context manager if profiling disabled
     from contextlib import nullcontext
 
@@ -175,7 +174,8 @@ class GeminiDriveConnector:
             PermissionError,
         ) as error:
             logger.error(f"Error processing {file_name}: {error}")
-        except Exception as error:
+        except Exception as error:  # pylint: disable=broad-exception-caught
+            # Catch-all for truly unexpected errors to prevent one file failure from stopping the entire sync
             logger.exception(f"Unexpected error processing {file_name}: {error}")
 
     def _process_file(

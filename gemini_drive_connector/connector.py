@@ -1,5 +1,7 @@
 """Main connector that orchestrates Drive and Gemini operations."""
 
+from typing import TYPE_CHECKING
+
 from loguru import logger  # type: ignore[import-untyped]
 
 from gemini_drive_connector.config.settings import (
@@ -12,6 +14,9 @@ from gemini_drive_connector.gemini.chat import GeminiChat
 from gemini_drive_connector.gemini.client import GeminiClient
 from gemini_drive_connector.gemini.file_store import GeminiFileStore
 from gemini_drive_connector.utils.ui import spinner_context
+
+if TYPE_CHECKING:
+    from google import genai
 
 # Conditionally import profiling utilities
 if PROFILING_ENABLED:
@@ -70,14 +75,43 @@ class GeminiDriveConnector:
         """
         logger.info(f"Starting sync for folder: {folder_id}")
 
-        # Initialize Drive client
+        self._ensure_drive_client_initialized()
+        file_handler = self._create_file_handler()
+        files = self._list_files_in_folder(folder_id, file_handler)
+
+        if not files:
+            return
+
+        self._process_all_files(files, file_handler)
+        logger.success(f"Finished syncing {len(files)} file(s) into File Search store")
+
+    def _ensure_drive_client_initialized(self) -> None:
+        """Initialize Drive client if not already initialized."""
         with spinner_context("Connecting to Google Drive...", "Connected to Google Drive"):
             if self._drive_client is None:
                 self._drive_client = DriveClient()
 
-        # List files
+    def _create_file_handler(self) -> DriveFileHandler:
+        """Create and return a DriveFileHandler instance.
+
+        Returns:
+            DriveFileHandler instance
+        """
+        return DriveFileHandler(self._drive_client.service)
+
+    def _list_files_in_folder(
+        self, folder_id: str, file_handler: DriveFileHandler
+    ) -> list[dict[str, str]]:
+        """List files in the specified folder.
+
+        Args:
+            folder_id: Google Drive folder ID
+            file_handler: DriveFileHandler instance
+
+        Returns:
+            List of file metadata dictionaries
+        """
         with spinner_context("Listing files in folder...") as spinner:
-            file_handler = DriveFileHandler(self._drive_client.service)
             with PerformanceProfiler("list_files"):
                 files = file_handler.list_files(
                     folder_id=folder_id, mime_types=self.config.allowed_mime_types
@@ -86,11 +120,20 @@ class GeminiDriveConnector:
             if not files:
                 spinner.fail(f"No files found in folder {folder_id}")
                 logger.warning(f"No files found in folder {folder_id}")
-                return
+                return []
 
             spinner.succeed(f"Found {len(files)} file(s) to process")
+            return files
 
-        # Process each file
+    def _process_all_files(
+        self, files: list[dict[str, str]], file_handler: DriveFileHandler
+    ) -> None:
+        """Process all files in the list.
+
+        Args:
+            files: List of file metadata dictionaries
+            file_handler: DriveFileHandler instance
+        """
         for idx, file_info in enumerate(files, 1):
             file_id = file_info["id"]
             name = file_info["name"]
@@ -98,24 +141,33 @@ class GeminiDriveConnector:
 
             logger.info(f"Processing file {idx}/{len(files)}: {name} ({mime_type})")
 
-            try:
-                self._process_file(file_handler, file_id, name, mime_type)
-            except (
-                OSError,
-                ValueError,
-                KeyError,
-                AttributeError,
-                TimeoutError,
-                FileNotFoundError,
-                PermissionError,
-            ) as e:
-                logger.error(f"Error processing {name}: {e}")
-                continue
-            except Exception as e:
-                logger.exception(f"Unexpected error processing {name}: {e}")
-                continue
+            self._process_file_safely(file_handler, file_id, name, mime_type)
 
-        logger.success(f"Finished syncing {len(files)} file(s) into File Search store")
+    def _process_file_safely(
+        self, file_handler: DriveFileHandler, file_id: str, name: str, mime_type: str
+    ) -> None:
+        """Process a file with error handling.
+
+        Args:
+            file_handler: DriveFileHandler instance
+            file_id: Google Drive file ID
+            name: File name
+            mime_type: File MIME type
+        """
+        try:
+            self._process_file(file_handler, file_id, name, mime_type)
+        except (
+            OSError,
+            ValueError,
+            KeyError,
+            AttributeError,
+            TimeoutError,
+            FileNotFoundError,
+            PermissionError,
+        ) as e:
+            logger.error(f"Error processing {name}: {e}")
+        except Exception as e:
+            logger.exception(f"Unexpected error processing {name}: {e}")
 
     def _process_file(
         self, file_handler: DriveFileHandler, file_id: str, name: str, mime_type: str
@@ -124,34 +176,80 @@ class GeminiDriveConnector:
 
         Optimized to minimize memory usage by processing in stages.
         """
-        # Download with profiling
+        content = self._download_file(file_handler, file_id, name)
+        uploaded = self._upload_file_to_store(content, name, mime_type)
+        uploaded_name = self._validate_uploaded_file_name(uploaded, name)
+        self._index_file(uploaded_name, name)
+
+        # Explicitly clear content from memory after processing
+        del content
+
+    def _download_file(self, file_handler: DriveFileHandler, file_id: str, name: str) -> bytes:
+        """Download file from Drive.
+
+        Args:
+            file_handler: DriveFileHandler instance
+            file_id: Google Drive file ID
+            name: File name for logging
+
+        Returns:
+            File content as bytes
+        """
         with (
             spinner_context(f"Downloading {name}...", f"Downloaded {name}"),
             PerformanceProfiler(f"download_{name}"),
         ):
-            content = file_handler.download_file(file_id)
+            return file_handler.download_file(file_id)
 
-        # Upload to Gemini with profiling
+    def _upload_file_to_store(
+        self, content: bytes, name: str, mime_type: str
+    ) -> "genai.types.File":
+        """Upload file to Gemini File Search store.
+
+        Args:
+            content: File content as bytes
+            name: File name
+            mime_type: File MIME type
+
+        Returns:
+            Uploaded file object
+        """
         with (
             spinner_context(f"Uploading {name} to File Search store...", f"Uploaded {name}"),
             PerformanceProfiler(f"upload_{name}"),
         ):
-            uploaded = self._file_store.upload_file(content, name, mime_type)
+            return self._file_store.upload_file(content, name, mime_type)
 
-        # Validate uploaded file name
+    def _validate_uploaded_file_name(self, uploaded: "genai.types.File", original_name: str) -> str:
+        """Validate and extract uploaded file name.
+
+        Args:
+            uploaded: Uploaded file object
+            original_name: Original file name for error messages
+
+        Returns:
+            Uploaded file name
+
+        Raises:
+            RuntimeError: If uploaded file has no name attribute
+        """
         uploaded_name = uploaded.name
         if not uploaded_name:
-            raise RuntimeError(f"Uploaded file {name} has no name attribute")
+            raise RuntimeError(f"Uploaded file {original_name} has no name attribute")
+        return uploaded_name
 
-        # Index with profiling
+    def _index_file(self, file_name: str, display_name: str) -> None:
+        """Index file in File Search store.
+
+        Args:
+            file_name: Name of uploaded file to index
+            display_name: Display name for logging
+        """
         with (
-            spinner_context(f"Indexing {name}...", f"Indexed {name}"),
-            PerformanceProfiler(f"index_{name}"),
+            spinner_context(f"Indexing {display_name}...", f"Indexed {display_name}"),
+            PerformanceProfiler(f"index_{display_name}"),
         ):
-            self._file_store.import_file(uploaded_name)
-
-        # Explicitly clear content from memory after processing
-        del content
+            self._file_store.import_file(file_name)
 
     def ask(self, prompt: str) -> str:
         """Ask a question over the indexed Drive content.

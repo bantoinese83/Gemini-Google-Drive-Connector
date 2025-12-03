@@ -78,45 +78,122 @@ def cmd_ask(question: str) -> None:
     print(answer)
 
 
-def main() -> None:
-    """Main CLI entry point."""
+def _parse_command() -> str:
+    """Parse command from command line arguments.
+
+    Returns:
+        Command string
+
+    Exits:
+        If no command is provided
+    """
     if len(sys.argv) < 2:
         logger.error("No command provided")
         print('Usage:\n  python main.py sync\n  python main.py ask "your question here"')
         sys.exit(1)
+    return sys.argv[1]
 
-    cmd = sys.argv[1]
+
+def _parse_question() -> str:
+    """Parse question from command line arguments.
+
+    Returns:
+        Question string
+
+    Exits:
+        If no question is provided or question is empty
+    """
+    if len(sys.argv) < 3:
+        logger.error("No question provided")
+        print('Provide a question, e.g. python main.py ask "What are the key risks?"')
+        sys.exit(1)
+
+    question = " ".join(sys.argv[2:])
+    if not question.strip():
+        logger.error("Question is empty")
+        print("Error: Question cannot be empty")
+        sys.exit(1)
+
+    return question
+
+
+def _handle_sync_command() -> None:
+    """Handle sync command."""
+    cmd_sync()
+
+
+def _handle_ask_command() -> None:
+    """Handle ask command."""
+    question = _parse_question()
+    cmd_ask(question)
+
+
+def _handle_unknown_command(cmd: str) -> None:
+    """Handle unknown command.
+
+    Args:
+        cmd: Unknown command string
+    """
+    logger.error(f"Unknown command: {cmd}")
+    print(f"Unknown command: {cmd}")
+    sys.exit(1)
+
+
+def _route_command(cmd: str) -> None:
+    """Route command to appropriate handler.
+
+    Args:
+        cmd: Command string
+    """
+    if cmd == "sync":
+        _handle_sync_command()
+    elif cmd == "ask":
+        _handle_ask_command()
+    else:
+        _handle_unknown_command(cmd)
+
+
+def _handle_keyboard_interrupt() -> None:
+    """Handle keyboard interrupt."""
+    logger.warning("Operation interrupted by user")
+    print("\nOperation interrupted by user")
+    sys.exit(130)  # Standard exit code for SIGINT
+
+
+def _handle_expected_error(error: Exception) -> None:
+    """Handle expected errors.
+
+    Args:
+        error: Exception that occurred
+    """
+    logger.exception("Command failed")
+    print(f"Error: {error}")
+    sys.exit(1)
+
+
+def _handle_unexpected_error(error: Exception) -> None:
+    """Handle unexpected errors.
+
+    Args:
+        error: Exception that occurred
+    """
+    logger.exception("Unexpected error occurred")
+    print(f"Unexpected error: {error}")
+    sys.exit(1)
+
+
+def main() -> None:
+    """Main CLI entry point."""
+    cmd = _parse_command()
 
     try:
-        if cmd == "sync":
-            cmd_sync()
-        elif cmd == "ask":
-            if len(sys.argv) < 3:
-                logger.error("No question provided")
-                print('Provide a question, e.g. python main.py ask "What are the key risks?"')
-                sys.exit(1)
-            question = " ".join(sys.argv[2:])
-            if not question.strip():
-                logger.error("Question is empty")
-                print("Error: Question cannot be empty")
-                sys.exit(1)
-            cmd_ask(question)
-        else:
-            logger.error(f"Unknown command: {cmd}")
-            print(f"Unknown command: {cmd}")
-            sys.exit(1)
+        _route_command(cmd)
     except KeyboardInterrupt:
-        logger.warning("Operation interrupted by user")
-        print("\nOperation interrupted by user")
-        sys.exit(130)  # Standard exit code for SIGINT
+        _handle_keyboard_interrupt()
     except (RuntimeError, FileNotFoundError, ValueError, PermissionError) as e:
-        logger.exception("Command failed")
-        print(f"Error: {e}")
-        sys.exit(1)
+        _handle_expected_error(e)
     except Exception as e:
-        logger.exception("Unexpected error occurred")
-        print(f"Unexpected error: {e}")
-        sys.exit(1)
+        _handle_unexpected_error(e)
 
 
 if __name__ == "__main__":

@@ -124,22 +124,53 @@ class GeminiFileStore:
 
         while not operation.done and poll_attempts < MAX_POLL_ATTEMPTS:
             time.sleep(current_interval)
-            try:
-                operation = self.client.operations.get(operation)
-            except Exception as e:
-                raise handle_api_error(
-                    "check operation status", e, "Operation polling failed"
-                ) from e
-
+            operation = self._poll_operation_status(operation)
             poll_attempts += 1
+            current_interval = self._calculate_next_poll_interval(poll_attempts, current_interval)
 
-            # Exponential backoff: increase interval gradually, but cap at maximum
-            # This reduces API calls for long-running operations
-            if poll_attempts > 3:  # Start backoff after initial quick checks
-                current_interval = min(
-                    current_interval * 1.5, MAX_POLL_INTERVAL
-                )  # 1.5x multiplier, capped
+        self._validate_operation_completion(operation, file_name)
 
+    def _poll_operation_status(self, operation: "genai.types.Operation") -> "genai.types.Operation":
+        """Poll for operation status update.
+
+        Args:
+            operation: Current operation object
+
+        Returns:
+            Updated operation object
+        """
+        try:
+            return self.client.operations.get(operation)
+        except Exception as e:
+            raise handle_api_error("check operation status", e, "Operation polling failed") from e
+
+    def _calculate_next_poll_interval(self, poll_attempts: int, current_interval: float) -> float:
+        """Calculate next polling interval with exponential backoff.
+
+        Args:
+            poll_attempts: Number of polling attempts made
+            current_interval: Current polling interval in seconds
+
+        Returns:
+            Next polling interval in seconds
+        """
+        if poll_attempts > 3:  # Start backoff after initial quick checks
+            return min(current_interval * 1.5, MAX_POLL_INTERVAL)  # 1.5x multiplier, capped
+        return current_interval
+
+    def _validate_operation_completion(
+        self, operation: "genai.types.Operation", file_name: str
+    ) -> None:
+        """Validate that operation completed successfully.
+
+        Args:
+            operation: Operation object to validate
+            file_name: Name of file being imported (for error messages)
+
+        Raises:
+            TimeoutError: If operation timed out
+            RuntimeError: If operation failed
+        """
         if not operation.done:
             timeout_seconds = MAX_POLL_ATTEMPTS * POLL_INTERVAL
             raise TimeoutError(

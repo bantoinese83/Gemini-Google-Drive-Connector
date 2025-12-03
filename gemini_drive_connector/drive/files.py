@@ -89,36 +89,21 @@ class DriveFileHandler:
         """
         files: list[dict[str, str]] = []
         page_token: str | None = None
-        max_pages = 100
         page_count = 0
 
         try:
-            while page_count < max_pages:
-                try:
-                    resp = self._files_api.list(
-                        q=query,
-                        spaces="drive",
-                        fields="nextPageToken, files(id, name, mimeType, size)",
-                        pageToken=page_token,
-                    ).execute()
-                except HttpError as e:
-                    self._handle_http_error(e, "list files")
+            while page_count < self._get_max_pages():
+                resp = self._fetch_page(query, page_token)
+                page_files = self._extract_files_from_response(resp)
+                files.extend(page_files)
 
-                page_files = resp.get("files", [])
-                if page_files:
-                    # Use extend() which is more efficient than repeated append()
-                    files.extend(page_files)
-
-                page_token = resp.get("nextPageToken")
+                page_token = self._get_next_page_token(resp)
                 if not page_token:
                     break
 
                 page_count += 1
 
-            if page_count >= max_pages:
-                logger.warning(
-                    f"Reached maximum page limit ({max_pages}), some files may be missing"
-                )
+            self._check_page_limit(page_count)
 
         except (FileNotFoundError, PermissionError, RuntimeError):
             raise
@@ -127,6 +112,63 @@ class DriveFileHandler:
             raise RuntimeError(f"Failed to list files: {e}") from e
 
         return files
+
+    def _get_max_pages(self) -> int:
+        """Get maximum number of pages to fetch."""
+        return 100
+
+    def _fetch_page(self, query: str, page_token: str | None) -> dict:
+        """Fetch a single page of files.
+
+        Args:
+            query: Drive API query string
+            page_token: Token for pagination
+
+        Returns:
+            API response dictionary
+        """
+        try:
+            return self._files_api.list(
+                q=query,
+                spaces="drive",
+                fields="nextPageToken, files(id, name, mimeType, size)",
+                pageToken=page_token,
+            ).execute()
+        except HttpError as e:
+            self._handle_http_error(e, "list files")
+            raise  # Never reached, but satisfies type checker
+
+    def _extract_files_from_response(self, response: dict) -> list[dict[str, str]]:
+        """Extract file list from API response.
+
+        Args:
+            response: API response dictionary
+
+        Returns:
+            List of file metadata dictionaries
+        """
+        return response.get("files", [])
+
+    def _get_next_page_token(self, response: dict) -> str | None:
+        """Extract next page token from API response.
+
+        Args:
+            response: API response dictionary
+
+        Returns:
+            Next page token or None if no more pages
+        """
+        return response.get("nextPageToken")
+
+    def _check_page_limit(self, page_count: int) -> None:
+        """Check if page limit was reached and log warning if so.
+
+        Args:
+            page_count: Number of pages fetched
+        """
+        max_pages = self._get_max_pages()
+        if page_count >= max_pages:
+            logger.warning(f"Reached maximum page limit ({max_pages}), some files may be missing")
 
     def _validate_file_size(self, file_id: str) -> None:
         """Validate file size before download."""
@@ -153,36 +195,91 @@ class DriveFileHandler:
         Uses efficient chunked downloading to minimize memory footprint.
         """
         try:
-            request = self._files_api.get_media(fileId=file_id)
-            # Pre-allocate buffer with estimated size for better performance
-            buffer = io.BytesIO()
-            downloader = MediaIoBaseDownload(buffer, request)
-
-            # Calculate max chunks more efficiently
-            max_chunks = MAX_FILE_SIZE_MB  # Simplified calculation
-            chunk_count = 0
-
-            while chunk_count < max_chunks:
-                try:
-                    _, done = downloader.next_chunk()
-                    if done:
-                        break
-                    chunk_count += 1
-                except Exception as e:
-                    logger.error(f"Download chunk failed: {e}")
-                    raise RuntimeError(f"Failed to download file: {e}") from e
-
-            if chunk_count >= max_chunks:
-                raise ValueError("File download exceeded size limit")
-
-            # Reset buffer position before reading
-            buffer.seek(0)
-            # Read all content at once (already in memory, no streaming needed for API)
-            return buffer.read()
+            request = self._create_download_request(file_id)
+            buffer = self._download_to_buffer(request)
+            return self._read_buffer_content(buffer)
 
         except HttpError as e:
             self._handle_http_error(e, "download file")
             raise  # Never reached, but satisfies type checker
+
+    def _create_download_request(self, file_id: str):
+        """Create download request for file.
+
+        Args:
+            file_id: Google Drive file ID
+
+        Returns:
+            Media download request object
+        """
+        return self._files_api.get_media(fileId=file_id)
+
+    def _download_to_buffer(self, request) -> io.BytesIO:
+        """Download file content to buffer in chunks.
+
+        Args:
+            request: Media download request object
+
+        Returns:
+            BytesIO buffer containing file content
+        """
+        buffer = io.BytesIO()
+        downloader = MediaIoBaseDownload(buffer, request)
+        max_chunks = self._get_max_chunks()
+        chunk_count = 0
+
+        while chunk_count < max_chunks:
+            if self._download_next_chunk(downloader):
+                break
+            chunk_count += 1
+
+        self._validate_chunk_count(chunk_count, max_chunks)
+        return buffer
+
+    def _get_max_chunks(self) -> int:
+        """Get maximum number of chunks for download."""
+        return MAX_FILE_SIZE_MB  # Simplified calculation
+
+    def _download_next_chunk(self, downloader: MediaIoBaseDownload) -> bool:
+        """Download next chunk and return True if download is complete.
+
+        Args:
+            downloader: Media downloader instance
+
+        Returns:
+            True if download is complete, False otherwise
+        """
+        try:
+            _, done = downloader.next_chunk()
+            return done
+        except Exception as e:
+            logger.error(f"Download chunk failed: {e}")
+            raise RuntimeError(f"Failed to download file: {e}") from e
+
+    def _validate_chunk_count(self, chunk_count: int, max_chunks: int) -> None:
+        """Validate that chunk count doesn't exceed maximum.
+
+        Args:
+            chunk_count: Number of chunks downloaded
+            max_chunks: Maximum allowed chunks
+
+        Raises:
+            ValueError: If chunk count exceeds maximum
+        """
+        if chunk_count >= max_chunks:
+            raise ValueError("File download exceeded size limit")
+
+    def _read_buffer_content(self, buffer: io.BytesIO) -> bytes:
+        """Read content from buffer.
+
+        Args:
+            buffer: BytesIO buffer containing file content
+
+        Returns:
+            File content as bytes
+        """
+        buffer.seek(0)
+        return buffer.read()
 
     def _handle_http_error(self, error: HttpError, operation: str) -> None:
         """Handle HTTP errors with appropriate exceptions."""

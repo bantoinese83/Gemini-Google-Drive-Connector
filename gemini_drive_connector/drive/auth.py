@@ -57,29 +57,62 @@ class DriveAuth:
 
     def _load_or_refresh_credentials(self) -> Credentials | None:
         """Load credentials from token file or refresh if expired."""
-        if not os.path.exists(self.token_path):
+        if not self._token_file_exists():
             return None
 
-        try:
-            creds = Credentials.from_authorized_user_file(self.token_path, DRIVE_SCOPES)
-        except (json.JSONDecodeError, ValueError, KeyError) as e:
-            logger.warning(f"Token file corrupted, will re-authenticate: {e}")
-            with contextlib.suppress(OSError):
-                os.remove(self.token_path)
+        creds = self._load_credentials_from_file()
+        if not creds:
             return None
 
         if creds.valid:
             return creds
 
-        if creds.expired and creds.refresh_token:
-            try:
-                creds.refresh(Request())
-                return creds
-            except Exception as e:
-                logger.warning(f"Token refresh failed, will re-authenticate: {e}")
-                return None
+        return self._refresh_credentials_if_needed(creds)
 
-        return None
+    def _token_file_exists(self) -> bool:
+        """Check if token file exists.
+
+        Returns:
+            True if token file exists, False otherwise
+        """
+        return os.path.exists(self.token_path)
+
+    def _load_credentials_from_file(self) -> Credentials | None:
+        """Load credentials from token file.
+
+        Returns:
+            Credentials object or None if loading fails
+        """
+        try:
+            return Credentials.from_authorized_user_file(self.token_path, DRIVE_SCOPES)
+        except (json.JSONDecodeError, ValueError, KeyError) as e:
+            logger.warning(f"Token file corrupted, will re-authenticate: {e}")
+            self._remove_corrupted_token_file()
+            return None
+
+    def _remove_corrupted_token_file(self) -> None:
+        """Remove corrupted token file."""
+        with contextlib.suppress(OSError):
+            os.remove(self.token_path)
+
+    def _refresh_credentials_if_needed(self, creds: Credentials) -> Credentials | None:
+        """Refresh credentials if they are expired and have refresh token.
+
+        Args:
+            creds: Credentials object to refresh
+
+        Returns:
+            Refreshed credentials or None if refresh fails
+        """
+        if not (creds.expired and creds.refresh_token):
+            return None
+
+        try:
+            creds.refresh(Request())
+            return creds
+        except Exception as e:
+            logger.warning(f"Token refresh failed, will re-authenticate: {e}")
+            return None
 
     def _authenticate(self) -> Credentials:
         """Perform OAuth authentication flow.

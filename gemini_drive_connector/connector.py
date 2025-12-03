@@ -1,6 +1,5 @@
 """Main connector that orchestrates Drive and Gemini operations."""
 
-from halo import Halo  # type: ignore[import-untyped]
 from loguru import logger  # type: ignore[import-untyped]
 
 from gemini_drive_connector.config.settings import (
@@ -12,6 +11,7 @@ from gemini_drive_connector.drive.files import DriveFileHandler
 from gemini_drive_connector.gemini.chat import GeminiChat
 from gemini_drive_connector.gemini.client import GeminiClient
 from gemini_drive_connector.gemini.file_store import GeminiFileStore
+from gemini_drive_connector.utils.ui import spinner_context
 
 # Conditionally import profiling utilities
 if PROFILING_ENABLED:
@@ -71,13 +71,12 @@ class GeminiDriveConnector:
         logger.info(f"Starting sync for folder: {folder_id}")
 
         # Initialize Drive client
-        with Halo(text="Connecting to Google Drive...", spinner="dots") as spinner:
+        with spinner_context("Connecting to Google Drive...", "Connected to Google Drive"):
             if self._drive_client is None:
                 self._drive_client = DriveClient()
-            spinner.succeed("Connected to Google Drive")
 
         # List files
-        with Halo(text="Listing files in folder...", spinner="dots") as spinner:
+        with spinner_context("Listing files in folder...") as spinner:
             file_handler = DriveFileHandler(self._drive_client.service)
             with PerformanceProfiler("list_files"):
                 files = file_handler.list_files(
@@ -126,16 +125,18 @@ class GeminiDriveConnector:
         Optimized to minimize memory usage by processing in stages.
         """
         # Download with profiling
-        with Halo(text=f"Downloading {name}...", spinner="dots") as spinner:
-            with PerformanceProfiler(f"download_{name}"):
-                content = file_handler.download_file(file_id)
-            spinner.succeed(f"Downloaded {name}")
+        with (
+            spinner_context(f"Downloading {name}...", f"Downloaded {name}"),
+            PerformanceProfiler(f"download_{name}"),
+        ):
+            content = file_handler.download_file(file_id)
 
         # Upload to Gemini with profiling
-        with Halo(text=f"Uploading {name} to File Search store...", spinner="dots") as spinner:
-            with PerformanceProfiler(f"upload_{name}"):
-                uploaded = self._file_store.upload_file(content, name, mime_type)
-            spinner.succeed(f"Uploaded {name}")
+        with (
+            spinner_context(f"Uploading {name} to File Search store...", f"Uploaded {name}"),
+            PerformanceProfiler(f"upload_{name}"),
+        ):
+            uploaded = self._file_store.upload_file(content, name, mime_type)
 
         # Validate uploaded file name
         uploaded_name = uploaded.name
@@ -143,10 +144,11 @@ class GeminiDriveConnector:
             raise RuntimeError(f"Uploaded file {name} has no name attribute")
 
         # Index with profiling
-        with Halo(text=f"Indexing {name}...", spinner="dots") as spinner:
-            with PerformanceProfiler(f"index_{name}"):
-                self._file_store.import_file(uploaded_name)
-            spinner.succeed(f"Indexed {name}")
+        with (
+            spinner_context(f"Indexing {name}...", f"Indexed {name}"),
+            PerformanceProfiler(f"index_{name}"),
+        ):
+            self._file_store.import_file(uploaded_name)
 
         # Explicitly clear content from memory after processing
         del content

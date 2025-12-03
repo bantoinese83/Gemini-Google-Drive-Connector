@@ -8,6 +8,7 @@ from googleapiclient.http import MediaIoBaseDownload
 from loguru import logger  # type: ignore[import-untyped]
 
 from gemini_drive_connector.config.settings import MAX_FILE_SIZE_MB
+from gemini_drive_connector.utils.validation import validate_file_id, validate_folder_id
 
 if TYPE_CHECKING:
     from googleapiclient.discovery import Resource
@@ -43,8 +44,7 @@ class DriveFileHandler:
             PermissionError: If access is denied
             RuntimeError: If listing fails
         """
-        if not folder_id or not folder_id.strip():
-            raise ValueError("Folder ID cannot be empty")
+        validate_folder_id(folder_id)
 
         query = self._build_query(folder_id, mime_types)
         return self._fetch_all_files(query)
@@ -64,8 +64,7 @@ class DriveFileHandler:
             PermissionError: If access is denied
             RuntimeError: If download fails
         """
-        if not file_id or not file_id.strip():
-            raise ValueError("File ID cannot be empty")
+        validate_file_id(file_id)
 
         self._validate_file_size(file_id)
         return self._download_content(file_id)

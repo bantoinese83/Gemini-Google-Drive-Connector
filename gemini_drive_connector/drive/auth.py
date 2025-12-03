@@ -11,6 +11,8 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from loguru import logger  # type: ignore[import-untyped]
 
+from gemini_drive_connector.utils.errors import safe_execute
+
 if TYPE_CHECKING:
     from googleapiclient.discovery import Resource
 
@@ -98,12 +100,16 @@ class DriveAuth:
 
         self._validate_credentials_file()
 
-        try:
-            flow = InstalledAppFlow.from_client_secrets_file(self.credentials_path, DRIVE_SCOPES)
-            return flow.run_local_server(port=0)
-        except Exception as e:
-            logger.error(f"OAuth flow failed: {e}")
-            raise RuntimeError(f"Failed to complete OAuth flow: {e}") from e
+        return safe_execute(
+            "complete OAuth flow",
+            lambda: self._do_authenticate(),
+            "Failed to complete OAuth flow",
+        )
+
+    def _do_authenticate(self) -> Credentials:
+        """Internal method to perform authentication (without error handling)."""
+        flow = InstalledAppFlow.from_client_secrets_file(self.credentials_path, DRIVE_SCOPES)
+        return flow.run_local_server(port=0)
 
     def _validate_credentials_file(self) -> None:
         """Validate credentials file format.
@@ -133,8 +139,8 @@ class DriveAuth:
         Raises:
             RuntimeError: If service build fails
         """
-        try:
-            return build("drive", "v3", credentials=creds)
-        except Exception as e:
-            logger.error(f"Failed to build Drive service: {e}")
-            raise RuntimeError(f"Failed to initialize Drive service: {e}") from e
+        return safe_execute(
+            "initialize Drive service",
+            lambda: build("drive", "v3", credentials=creds),
+            "Failed to initialize Drive service",
+        )

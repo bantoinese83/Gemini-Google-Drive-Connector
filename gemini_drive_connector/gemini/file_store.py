@@ -11,6 +11,7 @@ from gemini_drive_connector.config.settings import (
     MAX_POLL_INTERVAL,
     POLL_INTERVAL,
 )
+from gemini_drive_connector.utils.errors import handle_api_error, safe_execute
 
 if TYPE_CHECKING:
     from google import genai
@@ -48,15 +49,15 @@ class GeminiFileStore:
 
     def _create_store(self) -> "genai.types.FileSearchStore":
         """Create a new File Search store."""
-        try:
-            store = self.client.file_search_stores.create(
+        store = safe_execute(
+            "create file search store",
+            lambda: self.client.file_search_stores.create(
                 config={"display_name": self.display_name}
-            )
-            logger.debug(f"Created file search store: {store.name}")
-            return store
-        except Exception as e:
-            logger.error(f"Failed to create file search store: {e}")
-            raise RuntimeError(f"Failed to create file search store: {e}") from e
+            ),
+            "Failed to create file search store",
+        )
+        logger.debug(f"Created file search store: {store.name}")
+        return store
 
     def upload_file(self, content: bytes, display_name: str, mime_type: str) -> "genai.types.File":
         """Upload a file to Gemini with optimized memory handling.
@@ -93,14 +94,14 @@ class GeminiFileStore:
             RuntimeError: If import fails
             TimeoutError: If import operation times out
         """
-        try:
-            op = self.client.file_search_stores.import_file(
+        op = safe_execute(
+            f"start importing file {file_name}",
+            lambda: self.client.file_search_stores.import_file(
                 file_search_store_name=self.name,
                 file_name=file_name,
-            )
-        except Exception as e:
-            logger.error(f"Failed to start importing file {file_name}: {e}")
-            raise RuntimeError(f"Failed to start importing file: {e}") from e
+            ),
+            f"Failed to start importing file {file_name}",
+        )
 
         self._wait_for_operation(op, file_name)
 
@@ -126,8 +127,9 @@ class GeminiFileStore:
             try:
                 operation = self.client.operations.get(operation)
             except Exception as e:
-                logger.error(f"Failed to check operation status: {e}")
-                raise RuntimeError(f"Operation polling failed: {e}") from e
+                raise handle_api_error(
+                    "check operation status", e, "Operation polling failed"
+                ) from e
 
             poll_attempts += 1
 

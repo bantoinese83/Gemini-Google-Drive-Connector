@@ -5,6 +5,9 @@ from typing import TYPE_CHECKING
 from google.genai import types as gtypes
 from loguru import logger  # type: ignore[import-untyped]
 
+from gemini_drive_connector.utils.errors import handle_api_error, safe_execute
+from gemini_drive_connector.utils.validation import validate_prompt
+
 if TYPE_CHECKING:
     from google import genai
 
@@ -40,16 +43,14 @@ class GeminiChat:
             ValueError: If prompt is empty
             RuntimeError: If query fails
         """
-        if not prompt or not prompt.strip():
-            raise ValueError("Prompt cannot be empty")
+        validate_prompt(prompt)
 
         logger.info(f"Processing question: {prompt[:50]}...")
 
         try:
             resp = self._chat.send_message(prompt)
         except Exception as e:
-            logger.error(f"Gemini API error: {e}")
-            raise RuntimeError(f"Failed to query Gemini: {e}") from e
+            raise handle_api_error("query Gemini", e) from e
 
         answer = getattr(resp, "text", "") or ""
 
@@ -62,14 +63,18 @@ class GeminiChat:
 
     def _create_chat(self, file_search_store_name: str) -> "genai.types.Chat":
         """Create chat instance bound to file search store."""
-        try:
-            file_search_tool = gtypes.Tool(
-                file_search=gtypes.FileSearch(file_search_store_names=[file_search_store_name])
-            )
-            return self.client.chats.create(
-                model=self.model,
-                config=gtypes.GenerateContentConfig(tools=[file_search_tool]),
-            )
-        except Exception as e:
-            logger.error(f"Failed to create chat: {e}")
-            raise RuntimeError(f"Failed to create chat: {e}") from e
+        return safe_execute(
+            "create chat",
+            lambda: self._do_create_chat(file_search_store_name),
+            "Failed to create chat",
+        )
+
+    def _do_create_chat(self, file_search_store_name: str) -> "genai.types.Chat":
+        """Internal method to create chat (without error handling)."""
+        file_search_tool = gtypes.Tool(
+            file_search=gtypes.FileSearch(file_search_store_names=[file_search_store_name])
+        )
+        return self.client.chats.create(
+            model=self.model,
+            config=gtypes.GenerateContentConfig(tools=[file_search_tool]),
+        )
